@@ -6,3 +6,11 @@ Content-Type: application/json
         "username": "user1",
         "password": "password1"
 }
+
+###
+
+GET http://localhost:8000/welcome
+
+###
+
+POST http://localhost:8000/refresh

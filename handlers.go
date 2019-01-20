@@ -76,7 +76,7 @@ func Signin(w http.ResponseWriter, r *http.Request) {
 
 func Welcome(w http.ResponseWriter, r *http.Request) {
 	// We can obtain the session token from the requests cookies, which come with every request
-	c, err := r.Cookie("session_token")
+	c, err := r.Cookie("token")
 	if err != nil {
 		if err == http.ErrNoCookie {
 			// If the cookie is not set, return an unauthorized status
@@ -87,15 +87,32 @@ func Welcome(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	sessionToken := c.Value
+	tknStr := c.Value
+	claims := &Claims{}
+	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
+		return jwtKey, nil
+	})
+	if !tkn.Valid {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if err != nil {
+		if err == jwt.ErrSignatureInvalid {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	// Finally, return the welcome message to the user
-	w.Write([]byte(fmt.Sprintf("Welcome %s!", sessionToken)))
+	w.Write([]byte(fmt.Sprintf("Welcome %v %v!", tkn, claims)))
 }
 
 func Refresh(w http.ResponseWriter, r *http.Request) {
-	c, err := r.Cookie("session_token")
+	c, err := r.Cookie("token")
 	if err != nil {
+		fmt.Println("no cookie", err)
 		if err == http.ErrNoCookie {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -103,16 +120,47 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	sessionToken := c.Value
+	tknStr := c.Value
+	claims := &Claims{}
+	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
+		return jwtKey, nil
+	})
+	if !tkn.Valid {
+		fmt.Println("token invalid")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if err != nil {
+		fmt.Println("err", err)
+		if err == jwt.ErrSignatureInvalid {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
-	// Now, create a new session token for the current user
+	if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) > 30*time.Second {
+		fmt.Println("not yet", time.Unix(claims.ExpiresAt, 0).Sub(time.Now()))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
-	// Delete the older session token
+	// Now, create a new token for the current user
+	expirationTime := time.Now().Add(5 * time.Minute)
+	claims.ExpiresAt = expirationTime.Unix()
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtKey)
+	if err != nil {
+		fmt.Println("cannot sign", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	// Set the new token as the users `session_token` cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:    "session_token",
-		Value:   sessionToken,
-		Expires: time.Now().Add(120 * time.Second),
+		Value:   tokenString,
+		Expires: expirationTime,
 	})
 }
