@@ -106,10 +106,6 @@ func Welcome(w http.ResponseWriter, r *http.Request) {
 	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
 		return jwtKey, nil
 	})
-	if !tkn.Valid {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
 	if err != nil {
 		if err == jwt.ErrSignatureInvalid {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -118,7 +114,10 @@ func Welcome(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
+	if !tkn.Valid {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	// Finally, return the welcome message to the user, along with their
 	// username given in the token
 	w.Write([]byte(fmt.Sprintf("Welcome %s!", claims.Username)))
