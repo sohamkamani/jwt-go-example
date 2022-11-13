@@ -14,3 +14,7 @@ GET http://localhost:8000/welcome
 ###
 
 POST http://localhost:8000/refresh
+
+###
+
+GET http://localhost:8000/logout

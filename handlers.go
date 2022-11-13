@@ -3,9 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
 	"net/http"
 	"time"
+
+	"github.com/golang-jwt/jwt/v4"
 )
 
 var jwtKey = []byte("my_secret_key")
@@ -21,10 +22,9 @@ type Credentials struct {
 	Username string `json:"username"`
 }
 
-//
 type Claims struct {
 	Username string `json:"username"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 func Signin(w http.ResponseWriter, r *http.Request) {
@@ -54,9 +54,9 @@ func Signin(w http.ResponseWriter, r *http.Request) {
 	// Create the JWT claims, which includes the username and expiry time
 	claims := &Claims{
 		Username: creds.Username,
-		StandardClaims: jwt.StandardClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
 			// In JWT, the expiry time is expressed as unix milliseconds
-			ExpiresAt: expirationTime.Unix(),
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},
 	}
 
@@ -139,10 +139,6 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
 		return jwtKey, nil
 	})
-	if !tkn.Valid {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
 	if err != nil {
 		if err == jwt.ErrSignatureInvalid {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -151,19 +147,23 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if !tkn.Valid {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	// (END) The code uptil this point is the same as the first part of the `Welcome` route
 
 	// We ensure that a new token is not issued until enough time has elapsed
 	// In this case, a new token will only be issued if the old token is within
 	// 30 seconds of expiry. Otherwise, return a bad request status
-	if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) > 30*time.Second {
+	if time.Until(claims.ExpiresAt.Time) > 30*time.Second {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	// Now, create a new token for the current use, with a renewed expiration time
 	expirationTime := time.Now().Add(5 * time.Minute)
-	claims.ExpiresAt = expirationTime.Unix()
+	claims.ExpiresAt = jwt.NewNumericDate(expirationTime)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(jwtKey)
 	if err != nil {
@@ -171,10 +171,18 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set the new token as the users `session_token` cookie
+	// Set the new token as the users `token` cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:    "session_token",
+		Name:    "token",
 		Value:   tokenString,
 		Expires: expirationTime,
+	})
+}
+
+func Logout(w http.ResponseWriter, r *http.Request) {
+	// immediately clear the token cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:    "token",
+		Expires: time.Now(),
 	})
 }
