@@ -1,6 +1,6 @@
 # JWT Go example
 
-Example application that implements JWT based authentication. Read the blog post [here](https://sohamkamani.com/blog/golang/2019-01-01-jwt-authentication/)
+Example application based on my blog post on [Implementing JWT based authentication in Golang](https://www.sohamkamani.com/golang/jwt-authentication/)
 
 To run this application, build and run the Go binary:
 
@@ -28,5 +28,3 @@ Hit the refresh route, and then inspect the clients cookies to see the new value
 ```
 POST http://localhost:8000/refresh
 ```
-
-You can find the working source code for this example [here](https://github.com/sohamkamani/jwt-go-example).
